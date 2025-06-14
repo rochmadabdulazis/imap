@@ -125,20 +125,97 @@ function autoLink($text)
     return nl2br($text);
 }
 
+function scanAttachments($msgno)
+{
+    global $imap;
+    $structure = imap_fetchstructure($imap, $msgno);
+    $attachments = [];
 
+    if (!$structure) return $attachments;
 
+    if (!isset($structure->parts)) return parseAttachmentPart($structure, '', $attachments);
 
+    foreach ($structure->parts as $index => $part) {
+        $partNumber = strval($index + 1);
+        $attachments = parseAttachmentPart($part, $partNumber, $attachments);
+    }
 
+    return $attachments;
+}
 
+function parseAttachmentPart($part, $partNumber, $attachments)
+{
+    $isAttachment = false;
+    $filename = '';
 
+    if (isset($part->disposition) && strtoupper($part->disposition) == 'ATTACHMENT') {
+        $isAttachment = true;
+    }
 
+    if (isset($part->dparameters)) {
+        foreach ($part->dparameters as $param) {
+            if (strtolower($param->attribute) == 'filename ') {
+                $isAttachment = true;
+                $filename = decodeMimeStr($param->value);
+            }
+        }
+    }
 
+    if (isset($part->parameters)) {
+        foreach ($part->parameters as $param) {
+            if (strtolower($param->attribute) == 'name') {
+                $isAttachment = true;
+                $filename = decodeMimeStr($param->value);
+            }
+        }
+    }
 
+    if ($isAttachment && $filename != '') {
+        $attachments[] = [
+            'partNumber' => $partNumber,
+            'filename' => $filename,
+            'encoding' => $part->encoding
+        ];
+    }
 
-/*
-html + plain body extractor
+    if (isset($part->parts)) {
+        foreach ($part->parts as $subIndex => $subPart) {
+            $subPartNumber = $partNumber . '.' . ($subIndex + 1);
+            $attachments = parseAttachmentPart($subPart, $subPartNumber, $attachments);
+        }
+    }
 
-function imapGetBody($msgno, $mode = 'plain')
+    return $attachments;
+}
+function decodeMimeStr($str)
+{
+    $elements = imap_mime_header_decode($str);
+    $result = '';
+    foreach ($elements as $element) {
+        $result .= $element->text;
+    }
+    return $result;
+}
+
+function getAttachments($msgno, $partNumber, $filename, $encoding)
+{
+    global $imap;
+    $data = imap_fetchbody($imap, $msgno, $partNumber);
+
+    switch ($encoding) {
+        case 3: $data = base64_decode($data); break;
+        case 4: $data = quoted_printable_decode($data); break;
+    }
+
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Content-Length: ' . strlen($data));
+    echo($data);
+    imapClose();
+    exit;
+}
+
+function imapGetBodyHtml($msgno, $mode = 'multi')
 {
     global $imap;
     $structure = imap_fetchstructure($imap, $msgno);
@@ -154,11 +231,11 @@ function imapGetBody($msgno, $mode = 'plain')
         }
     }
 
-    $result = findBodyPart($msgno, $structure, "", $mode);
+    $result = findBodyPartHtml($msgno, $structure, "", $mode);
 
     return $result ?? "(Body Kosong)";
 }
-function findBodyPart($msgno, $structure, $partNumber, $mode)
+function findBodyPartHtml($msgno, $structure, $partNumber, $mode)
 {
     global $imap;
     $prefix = ($partNumber === "") ? "" : $partNumber . ".";
@@ -179,7 +256,7 @@ function findBodyPart($msgno, $structure, $partNumber, $mode)
                 $html = $body;
             }
         } elseif ($part->type == 1 && isset($part->parts)) {
-            $nested = findBodyPart($msgno, $part, $currentPart, $mode);
+            $nested = findBodyPartHtml($msgno, $part, $currentPart, $mode);
             if ($nested) return $nested;
         }
     }
@@ -192,4 +269,3 @@ function findBodyPart($msgno, $structure, $partNumber, $mode)
 
     return false;
 }
-*/
