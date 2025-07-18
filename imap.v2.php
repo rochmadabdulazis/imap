@@ -63,7 +63,19 @@ function parseImapStructure($imapStream, $msgNumber) {
 
     if (!$structure) return $result;
 
-    $stack = [[$structure, '1']];
+    // $stack = [[$structure, '1']];
+
+    $stack = [];
+
+    if (isset($structure->parts)) {
+        // multipart: mulai dari root tanpa section
+        foreach ($structure->parts as $i => $subPart) {
+            $stack[] = [$subPart, (string)($i + 1)];
+        }
+    } else {
+        // single-part: langsung bagian 1
+        $stack[] = [$structure, '1'];
+    }
 
     while ($stack) {
         list($part, $section) = array_pop($stack);
@@ -146,13 +158,13 @@ function autoLink($text)
     $pattern_url = '/\b(https?:\/\/[^\s<>]+)/i';
     $text = preg_replace_callback($pattern_url, function($matches) {
         $url = $matches[1];
-        return '<a href="' . $url . '" target="_blank" rel="noopener noreferrer">' . $url . '</a>';
+        return '<a href="' . $url . '" target="_blank" rel="noopener noreferrer">' . substr($url, 0, 10) . '</a>';
     }, $text);
 
     $pattern_www = '/\b(www\.[^\s<>]+)/i';
     $text = preg_replace_callback($pattern_www, function($matches) {
         $url = 'http://' . $matches[1];
-        return '<a href="' . $url . '" target="_blank" rel="noopener noreferrer">' . $matches[1] . '</a>';
+        return '<a href="' . $url . '" target="_blank" rel="noopener noreferrer">' . subatr($matches[1], 0, 10) . '</a>';
     }, $text);
 
     $pattern_email = '/\b([A-Z0-9._%+-]+@[A-Z0-9.-]\.[A-Z]{2,})\b/i';
@@ -180,4 +192,11 @@ function getAttachments($msgno, $partNumber, $filename, $encoding)
     echo($data);
     imapClose();
     exit;
+}
+function getPart($msgno, $partNumber, $encoding)
+{
+    global $imap;
+    $data = imap_fetchbody($imap, $msgno, $partNumber);
+    if ($data == false) return false;
+    return decodePart($data, $encoding);
 }
