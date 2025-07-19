@@ -153,25 +153,40 @@ function decodePart($text, $encoding)
 
 function autoLink($text)
 {
+    $links = [];
+    $i = 0;
+
+    // Auto-link untuk http/https
+    $text = preg_replace_callback('/\b(https?:\/\/[^\s<>"\'\]\[(){}]+)/i', function($matches) use (&$links, &$i) {
+        $url = rtrim($matches[1], '.,)>]}');
+        $key = '[[[AUTO_LINK_' . $i++ . ']]]';
+        $links[$key] = '<a href="' . htmlspecialchars($url) . '" target="_blank" rel="noopener noreferrer">' 
+                     . htmlspecialchars(substr($url, 0, 50)) . '</a>';
+        return $key;
+    }, $text);
+
+    // Auto-link untuk www
+    $text = preg_replace_callback('/\b(www\.[^\s<>"\'\]\[(){}]+)/i', function($matches) use (&$links, &$i) {
+        $url = rtrim($matches[1], '.,)>]}');
+        $key = '[[[AUTO_LINK_' . $i++ . ']]]';
+        $links[$key] = '<a href="http://' . htmlspecialchars($url) . '" target="_blank" rel="noopener noreferrer">'
+                     . htmlspecialchars(substr($url, 0, 50)) . '</a>';
+        return $key;
+    }, $text);
+
+    // Auto-link untuk email
+    $text = preg_replace_callback('/\b([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b/i', function($matches) use (&$links, &$i) {
+        $email = $matches[1];
+        $key = '[[[AUTO_LINK_' . $i++ . ']]]';
+        $links[$key] = '<a href="mailto:' . htmlspecialchars($email) . '">' . htmlspecialchars($email) . '</a>';
+        return $key;
+    }, $text);
+
+    // Escape seluruh teks
     $text = htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
-    $pattern_url = '/\b(https?:\/\/[^\s<>]+)/i';
-    $text = preg_replace_callback($pattern_url, function($matches) {
-        $url = $matches[1];
-        return '<a href="' . $url . '" target="_blank" rel="noopener noreferrer">' . substr($url, 0, 10) . '</a>';
-    }, $text);
-
-    $pattern_www = '/\b(www\.[^\s<>]+)/i';
-    $text = preg_replace_callback($pattern_www, function($matches) {
-        $url = 'http://' . $matches[1];
-        return '<a href="' . $url . '" target="_blank" rel="noopener noreferrer">' . subatr($matches[1], 0, 10) . '</a>';
-    }, $text);
-
-    $pattern_email = '/\b([A-Z0-9._%+-]+@[A-Z0-9.-]\.[A-Z]{2,})\b/i';
-    $text = preg_replace_callback($pattern_email, function($matches) {
-        $email = $matches[1];
-        return '<a href="mailto:' . $email . '">' . $email . '</a>';
-    }, $text);
+    // Replace kembali placeholder dengan <a>
+    $text = strtr($text, $links);
 
     return nl2br($text);
 }
